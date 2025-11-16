@@ -290,7 +290,7 @@ jobs:
           Write-Host "│   1. Mở Remote Desktop Connection                 │" -ForegroundColor Yellow
           Write-Host "│   2. Nhập: $env:TAILSCALE_IP                      │" -ForegroundColor Yellow
           Write-Host "│   3. User: vanmanhgaming | Password: trên          │" -ForegroundColor Yellow
-          Write-Host "│   4. Enjoy! 🚀                                    │" -ForegroundColor Yellow
+          Write-Host "│   4. Done Nha Các Tình Yêu! 🚀                                    │" -ForegroundColor Yellow
           Write-Host "└───────────────────────────────────────────┘" -ForegroundColor Cyan
           
           # Lưu thời gian vào biến môi trường
