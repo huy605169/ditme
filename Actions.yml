@@ -233,7 +233,6 @@ jobs:
               "5_Giờ_(300m)"               { $totalMinutes = 300; $displayTime = "5 giờ" }
               "5_Giờ_30_Phút_(330m)"       { $totalMinutes = 330; $displayTime = "5 giờ 30 phút" }
               "6_Giờ_(360m)"               { $totalMinutes = 360; $displayTime = "6 giờ" }
-              "6_Giờ_10_Phút_(370m)"       { $totalMinutes = 370; $displayTime = "6 giờ 10 phút" }
           }
           
           # Tính thời gian chính xác
