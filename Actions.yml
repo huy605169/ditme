@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       duration:
-        description: '🕐 Thời gian sử dụng'
+        description: 'Thời gian sử dụng'
         required: false
         default: '1_Giờ_30_Phút_(90m)'
         type: choice
@@ -27,17 +27,22 @@ jobs:
     runs-on: windows-latest
     steps:
       # BANNER CHÀO MỪNG
-      - name: 🎯 KHỞI ĐỘNG HỆ THỐNG
+      - name: KHỞI ĐỘNG HỆ THỐNG
         shell: powershell
         run: |
-          Write-Host "`n🤖 vanmanhgaming RDP SERVER" -ForegroundColor Yellow
-          Write-Host "⚡ Powered by AI STV" -ForegroundColor Green
-          Write-Host "🕒 Thời gian: ${{ github.event.inputs.duration }}" -ForegroundColor Magenta
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+          $OutputEncoding = [System.Text.Encoding]::UTF8
+          chcp 65001 > $null
+          
+          Write-Host "`n vanmanhgaming RDP SERVER" -ForegroundColor Yellow
+          Write-Host " Powered by vanmanhgaming" -ForegroundColor Green
+          Write-Host " Thời gian: ${{ github.event.inputs.duration }}" -ForegroundColor Magenta
 
       # CẤU HÌNH HỆ THỐNG
-      - name: 🔧 CẤU HÌNH HỆ THỐNG
+      - name: CẤU HÌNH HỆ THỐNG
         shell: powershell
         run: |
+          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
@@ -45,7 +50,7 @@ jobs:
           netsh advfirewall firewall add rule name="RDP-Premium-Out" dir=out action=allow protocol=TCP localport=3389
           Set-Service -Name TermService -StartupType Automatic
           Start-Service TermService
-          Write-Host "✅ Cấu hình RDP hoàn tất" -ForegroundColor Green
+          Write-Host " Cấu hình RDP hoàn tất" -ForegroundColor Green
 
       # TẠO USER PREMIUM - (tối ưu mật khẩu)
       - name: 👤 TẠO TÀI KHOẢN PREMIUM
@@ -181,33 +186,51 @@ jobs:
               echo "TAILSCALE_IP=localhost" >> $env:GITHUB_ENV
           }
 
-      # DỌN DẸP
+      - name: 🌐 KIỂM TRA KẾT NỐI ĐẾN TAILSCALE
+        run: |
+          # Kích hoạt Tailscale bằng Auth Key và đặt tên máy theo ID của GitHub Runner
+          Write-Host "🔧 Đang khởi tạo Tailscale..."
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+
+          # Chờ Tailscale cấp địa chỉ IP
+          Write-Host "⏳ Đang chờ Tailscale cấp IP..."
+          $tsIP = $null
+          $retries = 0
+
+          while (-not $tsIP -and $retries -lt 10) {
+              $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+              Start-Sleep -Seconds 5
+              $retries++
+          }
+
+          # Nếu không lấy được địa chỉ IP thì báo lỗi và thoát
+          if (-not $tsIP) {
+              Write-Error "❌ Không thể lấy địa chỉ IP từ Tailscale. Dừng tiến trình."
+              exit 1
+          }
+
+          Write-Host "✅ Đã nhận IP Tailscale: $tsIP" -ForegroundColor Green
+
+          # Xuất IP sang biến môi trường để dùng ở bước tiếp theo
+          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
+
+      # KIỂM TRA KẾT NỐI RDP
+      - name: KIỂM TRA KẾT NỐI RDP
+        shell: pwsh
+        run: |
+          Write-Host " Địa chỉ Tailscale: $env:TAILSCALE_IP"
+          $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389 -WarningAction SilentlyContinue
+          if (-not $testResult.TcpTestSucceeded) {
+              Write-Error " Không thể kết nối TCP đến cổng RDP (3389)."
+              exit 1
+          }
+
+     # DỌN DẸP
       - name: 🧹 DỌN DẸP FILE TẠM
         if: always()
         run: |
           Remove-Item "$env:TEMP\rdp_password.txt" -Force -ErrorAction SilentlyContinue
           Write-Host "🧹 Đã dọn dẹp file tạm thành công!" -ForegroundColor Green
-
-      # LẬP LỊCH TỰ ĐỘNG TẮT VPS SAU THỜI GIAN ĐÃ CHỌN
-      - name: ⏳ LẬP LỊCH TỰ ĐỘNG TẮT VPS
-        shell: powershell
-        run: |
-          # Chuyển sang UTF-8 để hiển thị tiếng Việt
-          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-
-          # Tính thời gian tắt VPS
-          $taskName = "ShutdownVPS_Auto"
-          $shutdownTime = (Get-Date).AddMinutes($totalMinutes)  # nhận từ switch input
-
-          $timeStr = $shutdownTime.ToString("HH:mm")
-          $dateStr = $shutdownTime.ToString("MM/dd/yyyy")
-
-          # Tạo Task Scheduler
-          schtasks /Create /SC ONCE /TN $taskName /TR "shutdown.exe /s /t 60" /ST $timeStr /SD $dateStr /F
-
-          Write-Host "✅ Đã tạo lịch tự tắt VPS!"
-          Write-Host "⏳ Thời gian sử dụng: $displayTime"
-          Write-Host "🛑 VPS sẽ tự động tắt lúc: $shutdownTime"
 
       # HIỂN THỊ GIAO DIỆN ĐẸP
       - name: 🎉 THÔNG TIN KẾT NỐI
@@ -339,57 +362,33 @@ jobs:
           # Dọn dẹp jobs
           Get-Job -Name "SystemMonitor" -ErrorAction SilentlyContinue | Stop-Job -PassThru | Remove-Job -Force
 
-      # DỌN DẸP CHUYÊN NGHIỆP
-      - name: 🧹 DỌN DẸP HỆ THỐNG
+      # DỌN DẸP CUỐI CÙNG
+      - name: DỌN DẸP HỆ THỐNG
         if: always()
+        shell: powershell
         run: |
           Write-Host ""
-          Write-Host "🧹 ĐANG DỌN DẸP HỆ THỐNG..." -ForegroundColor Yellow
-          
-          $cleanupSteps = @(
-              @{Name="Xóa file password"; Script={
-                  Remove-Item "$env:TEMP\rdp_password.txt" -Force -ErrorAction SilentlyContinue
-              }},
-              @{Name="Vô hiệu hóa user"; Script={
-                  Disable-LocalUser -Name "AISTV-PREMIUM" -ErrorAction SilentlyContinue
-              }},
-              @{Name="Đóng kết nối Tailscale"; Script={
-                  & "$env:ProgramFiles\Tailscale\tailscale.exe" down --accept-risk=all -ErrorAction SilentlyContinue
-                  Start-Sleep -Seconds 5
-              }},
-              @{Name="Xóa rule firewall"; Script={
-                  # Cách 1: dùng netsh (không dùng -ErrorAction)
-                  netsh advfirewall firewall delete rule name="RDP-Premium" dir=in 2>$null
-                  netsh advfirewall firewall delete rule name="RDP-Premium" dir=out 2>$null
-                  netsh advfirewall firewall delete rule name="RDP-Premium-Out" dir=in 2>$null
-                  netsh advfirewall firewall delete rule name="RDP-Premium-Out" dir=out 2>$null
+          Write-Host " ĐANG DỌN DẸP HỆ THỐNG..." -ForegroundColor Yellow
 
-                  # Cách 2: dùng module NetSecurity (tốt hơn, có -ErrorAction)
-                  Remove-NetFirewallRule -DisplayName "RDP-Premium" -ErrorAction SilentlyContinue
-                  Remove-NetFirewallRule -DisplayName "RDP-Premium-Out" -ErrorAction SilentlyContinue
-              }},
-              @{Name="Khôi phục cài đặt RDP"; Script={
-                  Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force -ErrorAction SilentlyContinue
-                  Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "PortNumber" -Value 3389 -Force -ErrorAction SilentlyContinue
-                  Stop-Service -Name TermService -Force -ErrorAction SilentlyContinue
-                  Start-Sleep -Seconds 2
-              }}
-          )
-          
-          foreach($step in $cleanupSteps) {
-              Write-Host "│ 🗑️  $($step.Name)..." -NoNewline -ForegroundColor Gray
-              try {
-                  & $step.Script
-                  Write-Host "`r│ ✅ $($step.Name)                " -ForegroundColor Green
-              } catch {
-                  Write-Host "`r│ ⚠️  $($step.Name) - Lỗi nhưng bỏ qua" -ForegroundColor Yellow
-              }
-              Start-Sleep -Milliseconds 300
-          }
-          
-          # Dọn jobs còn sót (nếu có)
+          try { Disable-LocalUser -Name "vanmanhgaming" -ErrorAction SilentlyContinue } catch {}
+
+          try {
+              & "$env:ProgramFiles\Tailscale\tailscale.exe" down --accept-risk=all
+              Start-Sleep -Seconds 5
+          } catch {}
+
+          try {
+              netsh advfirewall firewall delete rule name="RDP-Premium" 2>$null
+              netsh advfirewall firewall delete rule name="RDP-Premium-Out" 2>$null
+              Remove-NetFirewallRule -DisplayName "RDP-Premium" -ErrorAction SilentlyContinue
+              Remove-NetFirewallRule -DisplayName "RDP-Premium-Out" -ErrorAction SilentlyContinue
+          } catch {}
+
+          try {
+              Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force
+              Stop-Service -Name TermService -Force -ErrorAction SilentlyContinue
+          } catch {}
+
           Get-Job | Stop-Job -PassThru | Remove-Job -Force -ErrorAction SilentlyContinue
-          
-          Write-Host ""
-          Write-Host "🎉 Dọn dẹp hoàn tất! Hẹn gặp lại! 👋" -ForegroundColor Green
-        shell: powershell
+
+          Write-Host " Dọn dẹp hoàn tất! Hẹn gặp lại! " -ForegroundColor Green
