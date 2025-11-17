@@ -348,24 +348,31 @@ jobs:
           
           $cleanupSteps = @(
               @{Name="Xóa file password"; Script={
-                  Remove-Item "$env:TEMP\rdp_password.txt" -ErrorAction SilentlyContinue
+                  Remove-Item "$env:TEMP\rdp_password.txt" -Force -ErrorAction SilentlyContinue
               }},
               @{Name="Vô hiệu hóa user"; Script={
                   Disable-LocalUser -Name "AISTV-PREMIUM" -ErrorAction SilentlyContinue
               }},
-              @{Name="Đóng kết nối mạng"; Script={
+              @{Name="Đóng kết nối Tailscale"; Script={
                   & "$env:ProgramFiles\Tailscale\tailscale.exe" down --accept-risk=all -ErrorAction SilentlyContinue
                   Start-Sleep -Seconds 5
               }},
               @{Name="Xóa rule firewall"; Script={
-                  netsh advfirewall firewall delete rule name="RDP-Premium" dir=in -ErrorAction SilentlyContinue
-                  netsh advfirewall firewall delete rule name="RDP-Premium-Out" dir=out -ErrorAction SilentlyContinue
+                  # Cách 1: dùng netsh (không dùng -ErrorAction)
+                  netsh advfirewall firewall delete rule name="RDP-Premium" dir=in 2>$null
+                  netsh advfirewall firewall delete rule name="RDP-Premium" dir=out 2>$null
+                  netsh advfirewall firewall delete rule name="RDP-Premium-Out" dir=in 2>$null
+                  netsh advfirewall firewall delete rule name="RDP-Premium-Out" dir=out 2>$null
+
+                  # Cách 2: dùng module NetSecurity (tốt hơn, có -ErrorAction)
                   Remove-NetFirewallRule -DisplayName "RDP-Premium" -ErrorAction SilentlyContinue
                   Remove-NetFirewallRule -DisplayName "RDP-Premium-Out" -ErrorAction SilentlyContinue
               }},
               @{Name="Khôi phục cài đặt RDP"; Script={
                   Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 1 -Force -ErrorAction SilentlyContinue
+                  Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "PortNumber" -Value 3389 -Force -ErrorAction SilentlyContinue
                   Stop-Service -Name TermService -Force -ErrorAction SilentlyContinue
+                  Start-Sleep -Seconds 2
               }}
           )
           
@@ -373,15 +380,16 @@ jobs:
               Write-Host "│ 🗑️  $($step.Name)..." -NoNewline -ForegroundColor Gray
               try {
                   & $step.Script
-                  Write-Host "`r│ ✅ $($step.Name)" -ForegroundColor Green
+                  Write-Host "`r│ ✅ $($step.Name)                " -ForegroundColor Green
               } catch {
-                  Write-Host "`r│ ⚠️  $($step.Name) - Đã xử lý an toàn" -ForegroundColor Yellow
+                  Write-Host "`r│ ⚠️  $($step.Name) - Lỗi nhưng bỏ qua" -ForegroundColor Yellow
               }
               Start-Sleep -Milliseconds 300
           }
           
-          # Dọn dẹp jobs còn sót
+          # Dọn jobs còn sót (nếu có)
           Get-Job | Stop-Job -PassThru | Remove-Job -Force -ErrorAction SilentlyContinue
           
           Write-Host ""
           Write-Host "🎉 Dọn dẹp hoàn tất! Hẹn gặp lại! 👋" -ForegroundColor Green
+        shell: powershell
