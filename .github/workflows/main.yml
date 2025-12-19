@@ -23,10 +23,9 @@ on:
           - '6_Giờ_(360m)'
 
 jobs:
-  Vanmanhgaming-Ubuntu-Setup:
+  Ubuntu-Setup:
     runs-on: ubuntu-latest
     steps:
-      # BANNER CHÀO MỪNG
       - name: KHỞI ĐỘNG HỆ THỐNG
         run: |
           echo ""
@@ -35,59 +34,69 @@ jobs:
           echo "Thời gian: ${{ github.event.inputs.duration }}"
           echo ""
 
-      # CẤU HÌNH HỆ THỐNG
       - name: CẤU HÌNH HỆ THỐNG
         run: |
           sudo apt update -y
           sudo apt upgrade -y
-          sudo apt install -y ufw sudo curl wget
-          # Mở SSH port
+          sudo apt install -y ufw sudo curl wget netcat
           sudo ufw allow 22
           sudo ufw --force enable
           echo "Cấu hình hệ thống hoàn tất"
 
-      # TẠO USER root (mật khẩu cố định)
       - name: 👤 TẠO TÀI KHOẢN root
         run: |
           echo "root:12345678" | sudo chpasswd
           sudo usermod -aG sudo root
           sudo passwd -u root
+          sudo sed -i 's/^PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/^PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo systemctl restart ssh
           echo "✅ Tài khoản root đã sẵn sàng với mật khẩu 12345678"
 
-      # THIẾT LẬP TAILSCALE (giữ logic nhưng Linux)
-      - name: 🌐 THIẾT LẬP MẠNG PREMIUM
+      - name: 🌐 THIẾT LẬP TAILSCALE
         env:
           TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
         run: |
           echo "🌐 ĐANG CÀI ĐẶT TAILSCALE"
+          # Thêm key và repo chính xác
           curl -fsSL https://pkgs.tailscale.com/stable/tailscale-keyring.gpg | sudo tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
-          curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/focal.list | sudo tee /etc/apt/sources.list.d/tailscale.list
+          echo "deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg] https://pkgs.tailscale.com/stable/ubuntu focal main" | sudo tee /etc/apt/sources.list.d/tailscale.list
           sudo apt update
           sudo apt install -y tailscale
-          sudo tailscale up --authkey=$TAILSCALE_AUTH_KEY --hostname=vanmanhgaming-premium-$GITHUB_RUN_ID --accept-routes --accept-dns --reset
           
-          # Lấy IP Tailscale
-          TAILSCALE_IP=$(tailscale ip -4)
+          # Kết nối Tailscale với retry
+          for i in {1..5}; do
+            sudo tailscale up --authkey=$TAILSCALE_AUTH_KEY --hostname=giahuy-premium-$GITHUB_RUN_ID --accept-routes --accept-dns --reset && break
+            echo "Thử lại Tailscale..."
+            sleep 5
+          done
+
+          # Lấy IP Tailscale với retry
+          for i in {1..10}; do
+            TAILSCALE_IP=$(tailscale ip -4 | head -n1)
+            if [[ -n "$TAILSCALE_IP" ]]; then break; fi
+            echo "Đang lấy IP Tailscale..."
+            sleep 3
+          done
           echo "TAILSCALE_IP=$TAILSCALE_IP" >> $GITHUB_ENV
           echo "✅ Địa chỉ IP Tailscale: $TAILSCALE_IP"
 
-      # KIỂM TRA KẾT NỐI SSH
       - name: KIỂM TRA KẾT NỐI SSH
         run: |
-          if nc -zv ${{ env.TAILSCALE_IP }} 22; then
-            echo "✅ Có thể kết nối SSH tới ${{ env.TAILSCALE_IP }}:22"
+          IP=${{ env.TAILSCALE_IP }}
+          if nc -z "$IP" 22; then
+            echo "✅ Có thể kết nối SSH tới $IP:22"
           else
             echo "❌ Không thể kết nối SSH"
             exit 1
           fi
 
-      # HIỂN THỊ GIAO DIỆN ĐẸP
       - name: 🎉 THÔNG TIN KẾT NỐI
         run: |
           IP=${{ env.TAILSCALE_IP }}
           USER=root
           PASS=12345678
-          
+
           case "${{ github.event.inputs.duration }}" in
             "30_Phút_(30m)") TOTAL_MINUTES=30 ;;
             "1_Giờ_(60m)") TOTAL_MINUTES=60 ;;
@@ -117,7 +126,6 @@ jobs:
           echo "│ 🕐 Kết thúc: $END         │"
           echo "└───────────────────────────┘"
 
-      # DUY TRÌ PHIÊN LÀM VIỆC
       - name: ⏳ DUY TRÌ PHIÊN LÀM VIỆC
         run: |
           END_TIME=$(date -d "+$TOTAL_MINUTES minutes" +%s)
@@ -126,9 +134,8 @@ jobs:
           done
           echo "🎯 ĐÃ HẾT THỜI GIAN - TỰ ĐỘNG DỪNG!"
 
-      # DỌN DẸP CUỐI CÙNG
       - name: 🧹 DỌN DẸP HỆ THỐNG
         if: always()
         run: |
-          sudo tailscale down
+          sudo tailscale down || true
           echo "✅ Đã dọn dẹp hệ thống"
