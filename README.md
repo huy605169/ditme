@@ -99,5 +99,5 @@ Sau khi workflow chạy xong, log sẽ hiển thị:
 ```text
 IP: 100.xxx.xxx.xxx
 User: vanmanhgaming
-Password: xA7kP9Qm
+Password: Tùy Theo Bản Random Và Mật Khẩu Cố Định Nha.
 Port: 3389
