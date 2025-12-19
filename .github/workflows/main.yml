@@ -38,7 +38,7 @@ jobs:
         run: |
           sudo apt update -y
           sudo apt upgrade -y
-          sudo apt install -y ufw sudo curl wget netcat
+          sudo apt install -y ufw sudo curl wget netcat-openbsd
           sudo ufw allow 22
           sudo ufw --force enable
           echo "Cấu hình hệ thống hoàn tất"
